@@ -58,7 +58,7 @@ class SourceBuildTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             base=Path(folder);inputs=self.fixtures(base);out=base/'release'
             build_coptic(*inputs,out)
-            j=json.loads((out/'lexicon.json').read_text());j['rows'][0][1]=0
+            j=json.loads((out/'lexicon.json').read_text());next(r for r in j['rows'] if r[0]=='ⲡⲉ')[1]=0
             (out/'lexicon.json').write_text(json.dumps(j,ensure_ascii=False))
             with self.assertRaisesRegex(ValueError,'differs'):
                 publish(out)
