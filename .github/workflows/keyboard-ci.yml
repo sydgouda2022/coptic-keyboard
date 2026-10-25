@@ -36,6 +36,14 @@ jobs:
           test -s dist/coptic-lexicon/lexicon.json
           test -s dist/keyboard-search.mjs
           test -s dist/sw.js
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          for file in Path('dist').glob('*.mjs'):
+              for dep in re.findall(r"from\\s+['\\\"]([^'\\\"]+)",file.read_text()):
+                  if dep.startswith('./') and not (file.parent/dep).exists():
+                      raise RuntimeError(f"Missing bundled ESM dependency {file}: {dep}")
+          PY
           ! grep -q 'coptic-keyboard-v1' dist/sw.js
       - name: Upload installable PWA
         uses: actions/upload-artifact@v4
