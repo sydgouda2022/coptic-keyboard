@@ -63,6 +63,12 @@ def db_connect(path):
         UNIQUE(lemma_id,native_form,dialect_mask));
       CREATE TABLE attestation(id TEXT PRIMARY KEY,spelling_id TEXT NOT NULL REFERENCES spelling(id),
         source TEXT NOT NULL,original_ref TEXT NOT NULL,source_sha256 TEXT NOT NULL);
+      CREATE TABLE prediction_surface(
+        native_form TEXT PRIMARY KEY,dialect_mask INTEGER NOT NULL
+          CHECK(dialect_mask BETWEEN 0 AND 3),
+        popularity INTEGER NOT NULL DEFAULT 0,
+        editorial_notation INTEGER NOT NULL CHECK(editorial_notation IN (0,1))
+      );
       CREATE INDEX idx_spelling_native ON spelling(native_form);
       CREATE INDEX idx_attestation_word ON attestation(spelling_id);
     ''')
@@ -81,7 +87,10 @@ def geo_mask(labels):
     return mask
 
 def coptic_tei_forms(path):
-    """Preserve entries' morphology/senses separately from surface prediction."""
+    """Extract source-listed orthographies, one POS and first English gloss.
+
+    This is not a full TEI grammar/sense or inflectional paradigm export.
+    """
     evidence=[]
     stats=collections.Counter()
     for e in xml_entries(path):
@@ -184,6 +193,14 @@ def build_coptic(tei_path,forms_path,popular_path,out):
             ref='written-form:'+hashlib.sha256(word.encode('utf-8')).hexdigest()[:20]
             db.execute('INSERT OR IGNORE INTO attestation VALUES (?,?,?,?,?)',
                        (eid,sid,source,ref,source_hashes[source]))
+    # The surface vocabulary is an independent projection of the source
+    # inventory. A TEI lemma and corpus-level word attribution are NOT
+    # interchangeable; the dedicated table retains merged dialect evidence.
+    for word,mask in sorted(merger.items()):
+        editorial=any(unicodedata.category(c)[0] not in ('L','M') for c in word)
+        db.execute('INSERT INTO prediction_surface VALUES (?,?,?,?)',
+                   (word,mask,supplement.get(word,0),int(editorial)))
+    assert db.execute('SELECT COUNT(*) FROM prediction_surface').fetchone()[0]==len(merger)
     unreferenced=db.execute('SELECT COUNT(*) FROM spelling s WHERE NOT EXISTS (SELECT 1 FROM attestation a WHERE a.spelling_id=s.id)').fetchone()[0]
     if unreferenced:
         raise ValueError(str(unreferenced)+' Coptic spellings lack per-form source evidence')
