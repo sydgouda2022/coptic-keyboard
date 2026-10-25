@@ -25,7 +25,8 @@ test('freeze API v2 entry points: additions/removals require deliberate contract
  assert.deepEqual(Object.keys(predict).sort(),[
   'COPTIC_KEYS','LANGUAGE','PREDICTION_API_VERSION',
   'createCopticKeyboard','isInsertableSurface','keyboardKey',
-  'keyboardReady','predictKeyboard','prepareKeyboardIndex'
+  'keyboardReady','predictKeyboard','prepareKeyboardIndex',
+  'preparePersonalIndex'
  ].sort());
  assert.deepEqual(Object.keys(editing).sort(),[
   'applyKey','backspaceRange','replaceRange','wordBeforeCaret'
