@@ -58,3 +58,27 @@ test('Unicode insertion is restricted by default; editorial marks opt in',()=>{
  assert.equal(isInsertableSurface('ⲁ\u0000',{includeEditorial:true}),false);
  assert.equal(isInsertableSurface('ⲁ\u200b',{includeEditorial:true}),false);
 });
+
+test('caret inside a Coptic supralinear grapheme is rejected across editing operations',()=>{
+ const value='ⲡⲁ\u0305ⲧ';
+ const inside=2; // between ⲁ and its combining supralinear bar
+ for(const operation of [
+  ()=>wordBeforeCaret(value,inside),
+  ()=>replaceRange(value,inside,inside,'ⲉ'),
+  ()=>backspaceRange(value,inside,inside),
+  ()=>applyKey(value,inside,inside,{text:'ⲛ'}),
+  ()=>applyKey(value,inside,inside,{action:'backspace'}),
+  ()=>replaceRange(value,1,inside,'')
+ ]) assert.throws(operation,RangeError);
+ assert.deepEqual(applyKey(value,3,3,{action:'backspace'}),
+  {value:'ⲡⲧ',caret:1});
+});
+test('complex emoji is atomic for caret selection, and valid edges still edit',()=>{
+ const text='ⲁ👩‍💻ⲡ';
+ for(const pos of [3,4,5]){
+  assert.throws(()=>replaceRange(text,pos,pos,'ⲉ'),RangeError);
+ }
+ const end=text.length-1;
+ assert.deepEqual(applyKey(text,end,end,{action:'backspace'}),
+  {value:'ⲁⲡ',caret:1});
+});
