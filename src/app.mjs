@@ -1,5 +1,5 @@
-import {ensureCopticLexicon} from './coptic_install.mjs';
-import {prepareKeyboardIndex,predictKeyboard} from './keyboard_search.mjs';
+import {ensureCopticLexicon} from './coptic-install.mjs';
+import {prepareKeyboardIndex,predictKeyboard} from './keyboard-search.mjs';
 import {wordBeforeCaret,replaceRange,backspaceRange} from './editor.mjs';
 
 const LETTERS=[...'ⲁⲃⲅⲇⲉⲋⲍⲏⲑⲓⲕⲗⲙⲛⲝⲟⲡⲣⲥⲧⲩⲫⲭⲯⲱϣϥϧϩϫϭϯ'];
