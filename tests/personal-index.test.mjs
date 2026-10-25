@@ -9,6 +9,8 @@ test('a known Bohairic word is never relabeled PERSONAL in Sahidic mode',()=>{
  const learned={'cop:ⲡⲓ':1000,'cop:ⲡⲫ':8};
  const candidate=predictKeyboard(prepared,'ⲡ',{learned,limit:20,dialect:'sahidic'});
  assert.equal(candidate.some(c=>c.text==='ⲡⲓ'),false);
+ const raw=predictKeyboard(prepared,'ⲡⲓ',{learned,dialect:'sahidic'})[0];
+ assert.equal(raw.attested,true,'Known raw spelling remains source-listed outside its dialect');
  assert.equal(candidate.find(c=>c.text==='ⲡⲉ').personal,false);
  assert.equal(candidate.find(c=>c.text==='ⲡⲫ').personal,true);
  const broad=predictKeyboard(prepared,'ⲡ',{learned,limit:20});
