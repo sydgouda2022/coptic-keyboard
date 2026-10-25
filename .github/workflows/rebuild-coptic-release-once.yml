@@ -16,7 +16,7 @@ jobs:
         with: {python-version: '3.12'}
       - uses: actions/setup-node@v5
         with: {node-version: '24'}
-      - name: Recompile exact pinned KELLIA and SCRIPTORIUM editions
+      - name: Recompile exact pinned KELLIA and SCRIPTORIUM editions (verified regression)
         run: |
           set -euo pipefail
           python tools/rebuild_release.py --write
