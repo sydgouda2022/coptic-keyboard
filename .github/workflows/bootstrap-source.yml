@@ -1,0 +1,76 @@
+name: Bootstrap Coptic keyboard from audited aaa source
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/bootstrap-source.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  import:
+    if: github.repository == 'sydgouda2022/coptic-keyboard'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+        with: {persist-credentials: true}
+      - uses: actions/setup-python@v6
+        with: {python-version: '3.12'}
+      - uses: actions/setup-node@v5
+        with: {node-version: '24'}
+      - name: Import native Coptic library and evidence
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch main https://github.com/sydgouda2022/aaa.git /tmp/aaa-original
+          mkdir -p src tests sources/seed-word-lists tools release docs
+          cp /tmp/aaa-original/shared-language/src/*.py src/
+          cp /tmp/aaa-original/shared-language/src/*.mjs src/
+          cp /tmp/aaa-original/shared-language/tests/* tests/
+          cp /tmp/aaa-original/renpet/web/assets/dictionaries/coptic.json sources/seed-word-lists/
+          cp /tmp/aaa-original/renpet/web/assets/dictionaries/coptic-popular.json sources/seed-word-lists/
+          cp /tmp/aaa-original/shared-language/README.md docs/UPSTREAM_SOURCE.md
+          rm -f src/lexicon_install.mjs src/publish_release.py tests/lexicon_install.test.mjs
+          curl -fLsS --retry 3 --max-time 150 'https://raw.githubusercontent.com/KELLIA/dictionary/f365e2d239bd12b6897f3a761487e40d384b2b24/xml/Comprehensive_Coptic_Lexicon-v1.2-2020.xml' -o /tmp/KELLIA-coptic.xml
+          echo 'ace84fce11b76386a6adb9888b2cb947056954fc9fe9c04aa0676b1f595fd43d  /tmp/KELLIA-coptic.xml' | sha256sum -c -
+          python src/compile_lexica.py coptic --tei /tmp/KELLIA-coptic.xml --forms sources/seed-word-lists/coptic.json --popular sources/seed-word-lists/coptic-popular.json --out release
+          python src/publish_compiled_coptic.py --out release
+          python - <<'PY'
+          import hashlib,json,sqlite3,subprocess
+          from pathlib import Path
+          d=Path('release')
+          m=json.loads((d/'manifest.json').read_text())
+          blob=(d/'lexicon.json').read_bytes()
+          assert hashlib.sha256(blob).hexdigest()==m['sha256']
+          assert m['spelling_records']==20652 and m['bytes']==len(blob)
+          with sqlite3.connect(d/'lexicon.sqlite3') as c:
+              assert c.execute('pragma integrity_check').fetchone()[0]=='ok'
+          assert m['sha256']=='a2d96bba65d01081750f9539b8c7a26c94ba93665f3f9a14f7b2fb517f476799', 'Source changed from previously tested Coptic release'
+          p={'origin':'sydgouda2022/aaa','commit':subprocess.check_output(['git','-C','/tmp/aaa-original','rev-parse','HEAD'],text=True).strip(),
+            'source_edition':'KELLIA Coptic v1.2 2020','release_sha256':m['sha256'],'records':m['spelling_records']}
+          Path('SOURCE_PROVENANCE.json').write_text(json.dumps(p,indent=2)+'\n')
+          PY
+          cat > README.md <<'EOF'
+          # Coptic Keyboard + Lexicon
+
+          Independent, native Unicode Sahidic/Bohairic predictive keyboard and
+          the canonical, source-pinned Coptic lexicon master. Renpet consumes
+          versioned assets with checksum verification. The original open-source
+          text and Coptic dictionary supplements are retained as build inputs.
+
+          This package is independent of the Hieroglyphic Keyboard repository.
+          See SOURCE_PROVENANCE.json for the original source revision.
+          EOF
+      - name: Test independently before publishing
+        run: |
+          set -euo pipefail
+          node --test tests/coptic_install.test.mjs tests/keyboard_search.test.mjs tests/predict.test.mjs
+          python -m compileall -q src
+      - name: Publish verified import into this GitHub repository
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md src tests sources tools release docs SOURCE_PROVENANCE.json
+          git diff --cached --quiet && exit 0
+          git commit -m 'Import and verify independent Coptic keyboard and source-backed lexicon'
+          git push origin HEAD:main
