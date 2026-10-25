@@ -1,4 +1,4 @@
-name: Audit independent keyboard source and canonical release
+name: Standalone Coptic keyboard — source, release, app and browser verification
 on:
   push:
     branches: [main]
@@ -7,39 +7,62 @@ on:
 permissions:
   contents: read
 jobs:
-  audit:
+  audit-and-build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 18
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with: {python-version: '3.12'}
       - uses: actions/setup-node@v5
         with: {node-version: '24'}
-      - name: Validate provenance, SQLite and JSON SHA-256 release
+      - name: Verify source-backed SQLite, JSON and source hashes
+        run: python tools/verify_release.py
+      - name: Run public prediction, editor, compiler and corruption tests
         run: |
           set -euo pipefail
-          python - <<'PY'
-          import hashlib,json,sqlite3
-          from pathlib import Path
-          p=Path('release')
-          manifest=json.loads((p/'manifest.json').read_text())
-          content=(p/'lexicon.json').read_bytes()
-          if hashlib.sha256(content).hexdigest()!=manifest['sha256']:raise ValueError('Payload integrity failure')
-          if len(content)!=manifest['bytes']:raise ValueError('Payload byte length mismatch')
-          j=json.loads(content)
-          rows=j['rows'] if manifest['language']=='cop' else j['entries']
-          if len(rows)!=manifest['spelling_records']:raise ValueError('Lexicon rows mismatch')
-          assert manifest['spelling_records']==20652
-          with sqlite3.connect(p/'lexicon.sqlite3') as db:
-              assert db.execute('pragma integrity_check').fetchone()[0]=='ok'
-          provenance=json.loads(Path('SOURCE_PROVENANCE.json').read_text())
-          assert provenance['origin']=='sydgouda2022/aaa'
-          assert provenance['release_sha256']==manifest['sha256']
-          print('Release validated:',manifest['language'],len(rows),manifest['sha256'])
-          PY
-      - name: Regression tests for native-script predictor and integrity
+          PYTHONPATH=src python -m unittest discover -s tests -p 'test_*.py' -v
+          node --test tests/*.test.mjs
+          node --check src/app.mjs
+      - name: Check reproducibility from pinned TEI upstream
         run: |
           set -euo pipefail
-          node --test tests/keyboard_search.test.mjs tests/predict.test.mjs tests/coptic_install.test.mjs
-          python -m compileall -q src
+          bash tools/rebuild_release.sh
+          git diff --exit-code -- release/lexicon.json release/manifest.json release/coverage.json
+      - name: Build fully self-contained offline application
+        run: |
+          set -euo pipefail
+          python tools/build_app.py
+          test -s dist/coptic-lexicon/lexicon.json
+          test -s dist/keyboard-search.mjs
+          test -s dist/sw.js
+          ! grep -q 'coptic-keyboard-v1' dist/sw.js
+      - name: Upload installable PWA
+        uses: actions/upload-artifact@v4
+        with:
+          name: standalone-coptic-keyboard-pwa
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+  browser:
+    needs: audit-and-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: {python-version: '3.12'}
+      - uses: actions/setup-node@v5
+        with: {node-version: '24'}
+      - name: Build PWA and install mobile browser engines
+        run: |
+          set -euo pipefail
+          python tools/build_app.py
+          npm install --no-save --package-lock=false playwright@1.56.1
+          npx playwright install --with-deps chromium webkit
+      - name: Serve app, then exercise iPhone/iPad WebKit/Chromium offline
+        run: |
+          set -euo pipefail
+          python -m http.server 8765 --bind 127.0.0.1 --directory dist >/tmp/coptic-web.log 2>&1 &
+          for i in $(seq 1 20); do curl -sf http://127.0.0.1:8765/ >/dev/null && break || sleep 1; done
+          node tests/browser.mjs
