@@ -67,3 +67,34 @@ test('tampered or truncated Coptic download fails closed',async()=>{
 test('wrong Coptic catalog cannot be accepted with a fake matching hash',async()=>{
  assert.equal(await validateSlot({...valid,manifest:{...manifest,language:'egy'}}),null);
 });
+
+test('blocked IndexedDB falls back to verified but explicitly volatile release',async()=>{
+ const broken={async read(){throw Error('storage blocked')},
+   async activate(){throw Error('storage blocked')}};
+ const result=await ensureCopticLexiconImpl({store:broken,fetcher:fetcher()});
+ assert.equal(result.status,'volatile');
+ assert.match(result.storageError,/storage blocked/);
+ assert.equal(result.payload.rows.length,4);
+});
+test('browser body timeout covers payload consumption, not merely response headers',async()=>{
+ const blockedFetch=async(url,{signal})=>{
+  if(url.includes('manifest'))return {ok:true,json:async()=>manifest};
+  return {ok:true,arrayBuffer:()=>new Promise((resolve,reject)=>{
+   if(signal.aborted)reject(Error('aborted'));
+   else signal.addEventListener('abort',()=>reject(Error('aborted')),{once:true});
+  })};
+ };
+ await assert.rejects(ensureCopticLexiconImpl({store:store(),fetcher:blockedFetch,
+   timeoutMs:25}),/download\/repair failed/);
+});
+test('stale verified release records failed update details without losing the active copy',async()=>{
+ const s=store(valid);
+ const bad={...manifest,sha256:'e'.repeat(64),release:'newer'};
+ const result=await ensureCopticLexiconImpl({store:s,fetcher:fetcher(bad,raw)});
+ assert.equal(result.status,'offline');
+ assert.match(result.updateError,/checksum mismatch/);
+ assert.equal(result.manifest.sha256,sha);
+});
+test('installer rejects malformed optional master fingerprint',()=>{
+ assert.throws(()=>validateManifest({...manifest,sqlite_sha256:'000'}),/manifest/);
+});
