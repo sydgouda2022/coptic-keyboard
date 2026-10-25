@@ -100,7 +100,9 @@ export function predictKeyboard(index,raw,{
   const snapshot=personalIndex==null?null:personalData.get(personalIndex);
   if(personalIndex!=null&&!snapshot)
     throw new TypeError('Expected an index from preparePersonalIndex');
-  let exact=false;
+  // Raw text remains source-listed regardless of the currently selected
+  // dialect; filtering controls only which completions are displayed.
+  let exact=index.known?.has(raw.normalize('NFC'))||false;
   // An explicit prepared snapshot is authoritative; callers rebuild it
   // whenever learning changes, and can keep their original object mutable.
   const getUsage=k=>snapshot ? (snapshot.usage.get(k)||0) :
