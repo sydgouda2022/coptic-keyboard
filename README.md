@@ -99,3 +99,44 @@ claims about real-device typing latency. See [the API stability contract](docs/A
 
 Renpet continues using a pinned source commit, while retaining ownership of
 its interface, browser-storage adapter, and its own mobile acceptance tests.
+
+
+## v2.1 targeted correctness and release hardening
+
+\`preparePersonalIndex(learned)\` creates an explicit **immutable snapshot**
+of caller-owned learned words and adjacent-word weights. Pass it to
+\`predictKeyboard(index,prefix,{personalIndex})\` or
+\`createCopticKeyboard(...).suggest(prefix,{personalIndex})\`. The snapshot is
+created **once when learning changes**, rather than scanning the full learned
+history on every keystroke. Supplying the older \`learned\` object remains
+backward compatible, but scans its entries for personal candidates on each
+prediction. When both are supplied, \`personalIndex\` is authoritative.
+
+Words already present in the source lexicon **keep their original dialect
+and lexical status**. A Bohairic-only word cannot reappear as a fabricated
+personal suggestion when the Sahidic filter is selected. The raw typed choice
+preserves source membership independently of suggestion filtering.
+
+All editing positions are UTF-16 **grapheme-cluster boundaries**. Invalid
+caret positions splitting Coptic combining bars or emoji are rejected, not
+silently corrected. Consumers should derive selection positions from their
+host text component and should avoid manufacturing interior offsets.
+
+### Recoverable canonical-release publication
+
+\`python tools/rebuild_release.py --write\` stages and verifies all four
+release assets, persists rollback backups and a recovery journal, then
+replaces the manifest last. An ordinary write error restores all previous
+files. If publication is interrupted by process termination/power loss, run:
+
+\`\`\`sh
+python tools/rebuild_release.py --recover
+python tools/rebuild_release.py --check
+\`\`\`
+
+\`--recover\` uses only local verified backups; it needs **no network**.
+Publication of four paths cannot be made globally atomic to arbitrary
+concurrent filesystem readers: they must verify the JSON against its
+manifest, or consume an immutable Git commit/package rather than reading a
+working tree during publication. If the rollback backups fail verification,
+recovery stops without hiding the problem.
