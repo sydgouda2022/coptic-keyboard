@@ -23,7 +23,7 @@ test('a known Bohairic word is never relabeled PERSONAL in Sahidic mode',()=>{
 test('Unicode canonical equivalents do not reclassify source-listed words',()=>{
  const index=prepareKeyboardIndex('cop',{rows:[['ⲁ\u0305',2]]});
  for(const options of [
-  {learned:{'cop:'+('ⲁ\u0305').normalize('NFC'):10}},
+  {learned:{['cop:'+('ⲁ\u0305').normalize('NFC')]:10}},
   {personalIndex:preparePersonalIndex({'cop:'+('ⲁ\u0305').normalize('NFC'):10})}
  ]){
   const suggestions=predictKeyboard(index,'ⲁ',{...options,dialect:'sahidic'});
