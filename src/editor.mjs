@@ -5,13 +5,24 @@ const WORD=/[\p{Script=Coptic}\p{Script=Greek}\p{Mark}]+$/u;
 function checkOffset(text,number,name){
   if(!Number.isInteger(number)||number<0||number>text.length)
     throw new RangeError('Invalid '+name);
-  // HTML selection offsets are UTF-16 code units. Reject positions between
-  // a surrogate pair so callers cannot accidentally corrupt astral Unicode.
-  if(number>0&&number<text.length){
-    const a=text.charCodeAt(number-1),b=text.charCodeAt(number);
-    if(a>=0xD800&&a<=0xDBFF&&b>=0xDC00&&b<=0xDFFF)
-      throw new RangeError('Selection bisects a Unicode surrogate pair');
+  if(number===0||number===text.length)return;
+  // Selection offsets are UTF-16 units, but editing operations must never
+  // split an extended grapheme cluster (including Coptic supralinear marks).
+  // Intl.Segmenter implements UAX #29 in all supported runtimes.
+  if(typeof Intl.Segmenter==='function'){
+    const segments=new Intl.Segmenter('und',{granularity:'grapheme'}).segment(text);
+    if(segments.containing(number)?.index!==number)
+      throw new RangeError('Selection bisects a Unicode grapheme cluster');
+    return;
   }
+  // Conservative fallback: protect surrogate pairs, combining marks, ZWJ
+  // sequences and variation selectors. Unknown segmentation cannot justify
+  // splitting characters, but complex scripts should use Intl.Segmenter.
+  const before=text.charCodeAt(number-1),next=text.charCodeAt(number);
+  if((before>=0xD800&&before<=0xDBFF&&next>=0xDC00&&next<=0xDFFF)||
+     /[\p{Mark}\u200D\uFE0E\uFE0F]/u.test(text[number])||
+     text[number-1]==='\u200D')
+    throw new RangeError('Selection bisects a Unicode grapheme cluster');
 }
 export function wordBeforeCaret(value,position){
   if(typeof value!=='string')throw new TypeError('value must be string');
