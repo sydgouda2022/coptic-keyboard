@@ -6,7 +6,7 @@ import {readFileSync} from 'node:fs';
 
 const catalog=JSON.parse(readFileSync(new URL('../release/lexicon.json',import.meta.url),'utf8'));
 const keyboard=createCopticKeyboard(catalog,{limit:9});
-const chars=['ⲡ','ⲉ','ⲛ','ⲟ','ⲙ','ⲱ','\u0305','ⲃ','ⲧ',' ','𓄿','ⲁ'];
+const chars=['ⲡ','ⲉ','ⲛ','ⲟ','ⲙ','ⲱ','ⲁ\u0305','ⲃ','ⲧ',' ','𓄿','👩‍💻'];
 // Seeded deterministic cases reproduce on CI; no property-fuzzer dependency.
 let state=0x9e3779b9;
 const rand=n=>{state^=state<<13;state^=state>>>17;state^=state<<5;
@@ -15,10 +15,10 @@ const rand=n=>{state^=state<<13;state^=state>>>17;state^=state<<5;
 test('5,000 deterministic Unicode editing invariants',()=>{
  for(let i=0;i<5000;i++){
   const value=Array.from({length:rand(20)},()=>chars[rand(chars.length)]).join('');
-  const positions=[0,...Array.from({length:value.length-1},(_,k)=>k+1),value.length]
-   .filter(p=>!(p>0&&p<value.length &&
-     value.charCodeAt(p-1)>=0xD800 && value.charCodeAt(p-1)<=0xDBFF &&
-     value.charCodeAt(p)>=0xDC00&&value.charCodeAt(p)<=0xDFFF));
+  // Real caret positions are extended grapheme boundaries, not every
+  // UTF-16 code-unit boundary. Editing inside a Coptic overline is forbidden.
+  const positions=[...new Set([0,...[...new Intl.Segmenter('und',
+    {granularity:'grapheme'}).segment(value)].map(s=>s.index),value.length])];
   const left=positions[rand(positions.length)];
   const right=positions[rand(positions.length)];
   const start=Math.min(left,right),end=Math.max(left,right);
