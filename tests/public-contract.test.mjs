@@ -19,7 +19,6 @@ test('freeze API v2 entry points: additions/removals require deliberate contract
   'backspaceRange','createCopticKeyboard','isInsertableSurface',
   'keyboardKey','keyboardReady','predictKeyboard','prepareKeyboardIndex',
   'preparePersonalIndex',
-  'preparePersonalIndex',
   'replaceRange','validateCatalog','validateManifest','verifyReleaseBytes',
   'wordBeforeCaret'
  ].sort());
