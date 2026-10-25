@@ -18,15 +18,19 @@ jobs:
         with: {node-version: '24'}
       - name: Verify source-backed SQLite, JSON and source hashes
         run: python tools/verify_release.py
-      - name: Run public prediction, editor, compiler and corruption tests
+      - name: Run both standalone application and reusable public-package regression
         run: |
           set -euo pipefail
           PYTHONPATH=src python -m unittest discover -s tests -p 'test_*.py' -v
-          node --test tests/*.test.mjs
+          npm test
           node --check src/app.mjs
+          node --check src/keyboard.mjs
+          node --check src/index.mjs
+          npm pack --dry-run --json > /tmp/coptic-package-audit.json
       - name: Check reproducibility from pinned TEI upstream
         run: |
           set -euo pipefail
+          python tools/rebuild_release.py --check
           bash tools/rebuild_release.sh
           git diff --exit-code -- release/lexicon.json release/manifest.json release/coverage.json
       - name: Build fully self-contained offline application
@@ -74,3 +78,6 @@ jobs:
           python -m http.server 8765 --bind 127.0.0.1 --directory dist >/tmp/coptic-web.log 2>&1 &
           for i in $(seq 1 20); do curl -sf http://127.0.0.1:8765/ >/dev/null && break || sleep 1; done
           node tests/browser.mjs
+          python -m http.server 8129 --bind 127.0.0.1 --directory . >/tmp/coptic-embed-http.log 2>&1 &
+          for i in $(seq 1 20); do curl -sf http://127.0.0.1:8129/examples/index.html >/dev/null && break || sleep 1; done
+          node tests/browser.cjs
