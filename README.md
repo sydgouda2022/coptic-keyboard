@@ -75,6 +75,7 @@ updates, user data collection, or browser storage.
 
 ```sh
 npm test
+node tools/benchmark.mjs
 python tools/verify_release.py
 python -m unittest discover -s tests -p 'test_*.py' -v
 python tools/rebuild_release.py --check
@@ -86,3 +87,15 @@ SQLite semantic tables and coverage records. `--write` is for an explicitly
 reviewed database change. See [source provenance](docs/SOURCES.md) and
 [licensing notices](NOTICE.md). Test the packed JS package from a clean
 consumer; CI performs that step on each PR.
+
+## API v2 stability and consumer acceptance
+
+The exported function set and suggestion shape are frozen by regression tests.
+Unicode editing protects astral surrogate boundaries and combining-mark
+clusters. CI runs deterministic Unicode/property suites on Node 20, 22 and 24,
+checks the full 20,652-form catalog, reports ranking p50/p95/p99, and verifies
+actual packed JavaScript/TypeScript imports. Benchmarks are guardrails, **not**
+claims about real-device typing latency. See [the API stability contract](docs/API_V2_STABILITY.md).
+
+Renpet continues using a pinned source commit, while retaining ownership of
+its interface, browser-storage adapter, and its own mobile acceptance tests.
