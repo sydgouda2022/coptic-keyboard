@@ -32,7 +32,14 @@ def digest(path):
     return h.hexdigest()
 
 def coptic(s):
-    return isinstance(s,str) and bool(s) and any(0x2C80<=ord(c)<=0x2CFF or 0x03E2<=ord(c)<=0x03EF or 0x0370<=ord(c)<=0x03FF or 0x1F00<=ord(c)<=0x1FFF for c in s)
+    """A source transcription containing Coptic letters (not an input-ready token).
+
+    Editors can preserve brackets, reconstruction stars and word separators.
+    The runtime independently classifies literal keyboard-insertable surfaces.
+    """
+    return isinstance(s,str) and bool(s) and any(
+        0x2C80<=ord(c)<=0x2CFF or 0x03E2<=ord(c)<=0x03EF or
+        0x0370<=ord(c)<=0x03FF or 0x1F00<=ord(c)<=0x1FFF for c in s)
 
 def xml_entries(path):
     for _event,el in ET.iterparse(path,events=('end',)):
@@ -106,19 +113,25 @@ def build_coptic(tei_path,forms_path,popular_path,out):
     out=Path(out);out.mkdir(parents=True,exist_ok=True)
     core=json.loads(Path(forms_path).read_text(encoding='utf-8'))
     extra=json.loads(Path(popular_path).read_text(encoding='utf-8'))
-    if core.get('dialects')!=['Sahidic','Bohairic']:
-        raise ValueError('Unknown existing Coptic dialect inventory')
+    if core.get('schema')!=1 or extra.get('schema')!=1 or core.get('dialects')!=['Sahidic','Bohairic']:
+        raise ValueError('Unknown Coptic seed schema or dialect inventory')
+    if not isinstance(core.get('rows'),list) or not isinstance(extra.get('rows'),list):
+        raise ValueError('Invalid Coptic seed rows')
     merger={}
     source_words=set()
     for word,mask in core['rows']:
-        if coptic(word) and isinstance(mask,int):
-            merger[word]=merger.get(word,0)|mask
-            source_words.add(word)
+        if not isinstance(word,str) or not coptic(word) or type(mask) is not int or mask not in (0,1,2,3):
+            raise ValueError('Invalid seed word or dialect mask: '+str(word)[:80])
+        word=unicodedata.normalize('NFC',word)
+        merger[word]=merger.get(word,0)|mask
+        source_words.add(word)
     supplement={}
     for word,n in extra['rows']:
-        if coptic(word) and isinstance(n,int) and n>=0:
-            merger.setdefault(word,0)
-            supplement[word]=max(supplement.get(word,0),n)
+        if not isinstance(word,str) or not coptic(word) or type(n) is not int or n<0:
+            raise ValueError('Invalid supplemental Coptic form or rank: '+str(word)[:80])
+        word=unicodedata.normalize('NFC',word)
+        merger.setdefault(word,0)
+        supplement[word]=max(supplement.get(word,0),n)
     tei_evidence,stats=coptic_tei_forms(tei_path)
     tei_words=set()
     for lemma,form_ref,word,mask,pos,gloss in tei_evidence:
@@ -149,7 +162,11 @@ def build_coptic(tei_path,forms_path,popular_path,out):
         db.execute('INSERT OR IGNORE INTO attestation VALUES (?,?,?,?,?)',
                    (eid,sid,'KELLIA-TEI',lemma+'/'+form_ref,source_hashes['KELLIA-TEI']))
     for word,mask in sorted(merger.items()):
-        # Words without matching TEI lemmas remain marked as unlinked, not fabricated.
+        # Do not invent a second unlinked lemma for an already TEI-linked
+        # written form. Homographic TEI lemmas retain their separate identities.
+        if word in tei_words:
+            continue
+        # Source-listed surfaces without a TEI lemma have one unlinked identity.
         lid='unlinked:'+hashlib.sha256(word.encode()).hexdigest()[:20]
         db.execute('INSERT OR IGNORE INTO lemma VALUES (?,?,?,?)',(lid,word,'',''))
         sid='coptic:'+hashlib.sha256((lid+'|'+word).encode()).hexdigest()[:20]
@@ -160,7 +177,6 @@ def build_coptic(tei_path,forms_path,popular_path,out):
         sources=[]
         if word in source_words:sources.append('SCRIPTORIUM-FORMS')
         if word in supplement:sources.append('KELLIA-SUPPLEMENT')
-        if word in tei_words:sources.append('KELLIA-TEI')
         if not sources:
             raise ValueError('Missing source evidence for Coptic form '+word)
         for source in sources:
