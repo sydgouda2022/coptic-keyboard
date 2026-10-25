@@ -45,7 +45,10 @@ export function prepareKeyboardIndex(language, pack) {
       source:'COMPILED-COPTIC',lexicalIdentityVerified:false};
   });
   rows.sort((a,b)=>compare(a.key,b.key)||compare(a.text,b.text));
-  return {language:LANGUAGE,rows};
+  // A source-listed word must never be relabeled PERSONAL simply because
+  // the selected dialect excluded its source-attested entry.
+  const known=new Set(rows.map(row=>row.text.normalize('NFC')));
+  return {language:LANGUAGE,rows,known};
 }
 function lowerBound(rows,key){
   let lo=0,hi=rows.length;
@@ -55,12 +58,37 @@ function lowerBound(rows,key){
 function allows(mask,dialect){
   return dialect==='all'||Boolean(mask & (dialect==='sahidic'?1:2));
 }
+// Explicit immutable snapshot for large learned dictionaries. Mutable usage
+// objects still work for legacy callers, but require a scan each prediction.
+// Rebuild the snapshot when learning changes; no implicit stale cache.
+const personalData=new WeakMap();
+export function preparePersonalIndex(learned={}) {
+  if(!learned||typeof learned!=='object'||Array.isArray(learned))
+    throw new TypeError('Learned counters must be a plain object');
+  const usage=new Map(),rows=[];
+  for(const [name,value] of Object.entries(learned)){
+    const amount=count(value);
+    if(!amount)continue;
+    usage.set(name,amount);
+    if(name.startsWith('cop:')){
+      const text=name.slice(4);
+      if(!isInsertableSurface(text))continue;
+      rows.push(Object.freeze({text,key:keyboardKey(text),
+        dialects:0,frequency:0,id:null}));
+    }
+  }
+  rows.sort((a,b)=>compare(a.key,b.key)||compare(a.text,b.text));
+  const index=Object.freeze({language:LANGUAGE,size:rows.length});
+  personalData.set(index,{rows,usage});
+  return index;
+}
 /** Raw typed input is always first. Ranking only affects later suggestions.
  * Word forms are returned verbatim; no generated/artificial morphology.
  */
 export function predictKeyboard(index,raw,{
   dialect='all',learned={},previous='',limit=4,includeEditorial=false,
-  includePhrases=false,includePersonal=true,balanced=false
+  includePhrases=false,includePersonal=true,balanced=false,
+  personalIndex=null
 }={}){
   if(!index||index.language!==LANGUAGE||!Array.isArray(index.rows))
     throw new TypeError('Expected prepared Coptic index');
@@ -69,9 +97,15 @@ export function predictKeyboard(index,raw,{
   if(!Number.isInteger(limit)||limit<1||limit>80)throw new RangeError('limit must be 1..80');
   if(raw.length===0)return [];
   const lookup=keyboardKey(raw),found=new Map();
+  const snapshot=personalIndex==null?null:personalData.get(personalIndex);
+  if(personalIndex!=null&&!snapshot)
+    throw new TypeError('Expected an index from preparePersonalIndex');
   let exact=false;
-  const getUsage=k=>learned&&typeof learned==='object'&&Object.hasOwn(learned,k)
-    ? count(learned[k]):0;
+  // An explicit prepared snapshot is authoritative; callers rebuild it
+  // whenever learning changes, and can keep their original object mutable.
+  const getUsage=k=>snapshot ? (snapshot.usage.get(k)||0) :
+    learned&&typeof learned==='object'&&Object.hasOwn(learned,k)
+      ? count(learned[k]):0;
   const consider=(row,personal=false)=>{
     if(!row.key.startsWith(lookup)||row.text===raw||
        !isInsertableSurface(row.text,{includeEditorial,includePhrases}))return;
@@ -96,13 +130,25 @@ export function predictKeyboard(index,raw,{
     if(row.text===raw){exact=true;continue;}
     consider(row);
   }
-  // Personal data is caller owned and is never promoted to a sourced lemma.
-  if(includePersonal&&learned&&typeof learned==='object'){
-    for(const [key,value] of Object.entries(learned)){
-      if(!key.startsWith('cop:')||count(value)===0)continue;
-      const text=key.slice(4);
-      if(!text||text===raw||found.has(text))continue;
-      consider({text,key:keyboardKey(text),dialects:0,frequency:0,id:null},true);
+  // Personal data is caller owned and never promoted to a sourced lemma.
+  // Source membership wins even when dialect filtering hides a word.
+  if(includePersonal){
+    if(snapshot){
+      for(let i=lowerBound(snapshot.rows,lookup);i<snapshot.rows.length;i++){
+        const row=snapshot.rows[i];
+        if(!row.key.startsWith(lookup))break;
+        if(row.text===raw||found.has(row.text)||
+           index.known?.has(row.text.normalize('NFC')))continue;
+        consider(row,true);
+      }
+    }else if(learned&&typeof learned==='object'){
+      for(const [key,value] of Object.entries(learned)){
+        if(!key.startsWith('cop:')||count(value)===0)continue;
+        const text=key.slice(4);
+        if(!text||text===raw||found.has(text)||
+           index.known?.has(text.normalize('NFC')))continue;
+        consider({text,key:keyboardKey(text),dialects:0,frequency:0,id:null},true);
+      }
     }
   }
   const ranked=[...found.values()].sort((a,b)=>b.score-a.score||compare(a.text,b.text));
