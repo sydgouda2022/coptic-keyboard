@@ -15,7 +15,9 @@ export interface IndexedForm {
   text:string; key:string; id:string; dialects:0|1|2|3;
   frequency:number; source:'COMPILED-COPTIC'; lexicalIdentityVerified:false;
 }
-export interface CopticIndex {language:'cop';rows:IndexedForm[];}
+export interface CopticIndex {language:'cop';rows:IndexedForm[];known:ReadonlySet<string>;}
+/** Immutable snapshot token; refresh with preparePersonalIndex when learning changes. */
+export interface CopticPersonalIndex {readonly language:'cop';readonly size:number;}
 export interface CopticSuggestion {
   text:string;raw:boolean;personal:boolean;attested:boolean;
   inLexicon:boolean;lexicalIdentityVerified:false;lexicon_ref:null;
@@ -26,6 +28,7 @@ export interface PredictionOptions {
   dialect?:CopticDialect;learned?:Record<string,number>;previous?:string;
   limit?:number;includeEditorial?:boolean;includePhrases?:boolean;
   includePersonal?:boolean;balanced?:boolean;
+  personalIndex?:CopticPersonalIndex|null;
 }
 export function keyboardKey(input:string,language?:'cop'):string;
 export function isInsertableSurface(text:string,options?:{
@@ -35,6 +38,7 @@ export function keyboardReady(text:string):boolean;
 export function prepareKeyboardIndex(language:'cop',pack:{
   rows:CopticCatalog['rows'];popularity?:Record<string,number>;
 }):CopticIndex;
+export function preparePersonalIndex(learned?:Record<string,number>):CopticPersonalIndex;
 export function predictKeyboard(index:CopticIndex,raw:string,
   options?:PredictionOptions):CopticSuggestion[];
 export function createCopticKeyboard(pack:{
