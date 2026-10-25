@@ -1,7 +1,7 @@
 /**
  * @packageDocumentation Coptic-only Unicode keyboard, offline prediction and
  * independent DOM widget; no calendar/editor or network dependency at import.
- * Use 'coptic-keyboard/styles.css' for the optional visual keyboard.
+ * Use '@sydgouda2022/coptic-keyboard/styles.css' for the optional visual keyboard.
  */
 export {
   LANGUAGE, PREDICTION_API_VERSION, keyboardKey, prepareKeyboardIndex,
