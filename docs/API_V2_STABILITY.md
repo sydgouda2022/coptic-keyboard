@@ -21,7 +21,7 @@ The `src/keyboard_search.mjs` compatibility entry continues to expose the
 existing Renpet calls and delegates to the same implementation. It must not
 grow a competing prediction engine.
 
-Package version `2.0.0` is the **API compatibility version**; the
+Package version `2.1.0` adds optional prepared personal-history indexing without changing existing calls; the
 `PREDICTION_API_VERSION` export is `2`. Neither should change for test-only,
 documentation or internal performance improvements.
 
