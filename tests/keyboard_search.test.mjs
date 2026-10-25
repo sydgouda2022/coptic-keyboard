@@ -1,66 +1,79 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {keyboardKey,prepareKeyboardIndex,predictKeyboard} from '../src/_generic_search.mjs';
+import {
+  keyboardKey,prepareKeyboardIndex,predictKeyboard,isInsertableSurface
+} from '../src/keyboard_search.mjs';
 
-const cop=prepareKeyboardIndex('cop',{rows:[
- ['ⲡⲉ',1],['ⲡⲓ',2],['ⲡⲱ',3],['ⲡⲕ',0],['ⲡⲉ̄',1]],popularity:{'ⲡⲉ':10,'ⲡⲓ':15}});
-const egy=prepareKeyboardIndex('egy',{entries:[
- {ref:'TLA:1',signs:'𓄿𓂝',attestations:9,lemma:'1'},
- {ref:'TLA:2',signs:'𓄿𓈖',attestations:5,lemma:'2'},
- {ref:'TLA:3',signs:'𓅓𓈖',attestations:7,lemma:'3'}]});
-test('Coptic search keys normalize marks but preserve actual writing',()=>{
- assert.equal(keyboardKey('ⲡⲉ̄','cop'),keyboardKey('ⲡⲉ','cop'));
- const r=predictKeyboard(cop,'ⲡ',{limit:10});
- assert.equal(r[0].text,'ⲡ');
- assert.ok(r.some(x=>x.text==='ⲡⲉ̄'),'Attested combining marks survive insertion');
- assert.ok(r.some(x=>x.text==='ⲡⲕ'&&x.dialects===0),'Undetermined forms appear in All only');
+const base={rows:[
+ ['ⲡⲉ',1],['ⲡⲓ',2],['ⲡⲱ',3],['ⲡⲕ',0],['ⲡⲉ̄',1],
+ ['*ⲡⲉ',1],['ⲡⲉ ⲛⲉ',1]],popularity:{'ⲡⲉ':30,'ⲡⲓ':20}};
+const index=prepareKeyboardIndex('cop',base);
+
+test('stable Unicode lookup folds marks without ever changing insertion bytes',()=>{
+ assert.equal(keyboardKey('ⲡⲉ̄'),keyboardKey('ⲡⲉ'));
+ assert.equal(keyboardKey('ⲡⲉ̄','cop'),'ⲡⲉ');
+ const result=predictKeyboard(index,'ⲡ',{limit:10});
+ assert.ok(result.some(x=>x.text==='ⲡⲉ̄'));
+ assert.equal(result[0].text,'ⲡ');
+ assert.throws(()=>keyboardKey('ⲡ','egy'),RangeError);
 });
-test('Sahidic/Bohairic filtering blocks cross-dialect and unknown attributions',()=>{
- const s=predictKeyboard(cop,'ⲡ',{dialect:'sahidic',limit:10});
+test('source-listed editorial reconstruction and phrases require explicit opt-in',()=>{
+ assert.equal(isInsertableSurface('ⲡⲉ'),true);
+ assert.equal(isInsertableSurface('*ⲡⲉ'),false);
+ assert.equal(isInsertableSurface('ⲡⲉ ⲛⲉ'),false);
+ const plain=predictKeyboard(index,'ⲡ',{limit:12});
+ assert.ok(!plain.some(x=>x.text==='ⲡⲉ ⲛⲉ'||x.text==='*ⲡⲉ'));
+ const phrases=predictKeyboard(index,'ⲡ',{limit:12,includePhrases:true});
+ assert.ok(phrases.some(x=>x.text==='ⲡⲉ ⲛⲉ'));
+ const editorial=predictKeyboard(index,'*',{limit:12,includeEditorial:true});
+ assert.ok(editorial.some(x=>x.text==='*ⲡⲉ'));
+});
+test('filter Sahidic, Bohairic and unknown dialects without inventing attribution',()=>{
+ const s=predictKeyboard(index,'ⲡ',{limit:10,dialect:'sahidic'});
  assert.ok(s.some(x=>x.text==='ⲡⲉ')&&s.some(x=>x.text==='ⲡⲱ'));
  assert.ok(!s.some(x=>x.text==='ⲡⲓ'||x.text==='ⲡⲕ'));
- const b=predictKeyboard(cop,'ⲡ',{dialect:'bohairic',limit:10});
+ const b=predictKeyboard(index,'ⲡ',{limit:10,dialect:'bohairic'});
  assert.ok(b.some(x=>x.text==='ⲡⲓ')&&b.some(x=>x.text==='ⲡⲱ'));
  assert.ok(!b.some(x=>x.text==='ⲡⲉ'||x.text==='ⲡⲕ'));
+ assert.ok(predictKeyboard(index,'ⲡ',{limit:10}).some(x=>x.text==='ⲡⲕ'));
+ assert.throws(()=>predictKeyboard(index,'ⲡ',{dialect:'unknown'}),RangeError);
 });
-test('raw input is always first and attestation is only true for known input',()=>{
- const r=predictKeyboard(egy,'𓄿𓂝',{limit:5});
- assert.equal(r[0].text,'𓄿𓂝');assert.equal(r[0].attested,true);
- assert.ok(r.every((x,i)=>i===0||x.text!=='𓄿𓂝'));
- const x=predictKeyboard(egy,'𓄿𓅃',{limit:5});
- assert.equal(x[0].attested,false);
+test('raw candidate is always first; catalog presence is not witness evidence',()=>{
+ const r=predictKeyboard(index,'ⲡⲉ',{limit:3});
+ assert.equal(r[0].text,'ⲡⲉ');
+ assert.equal(r[0].attested,true);
+ assert.equal(r[0].lexicalIdentityVerified,false);
+ assert.ok(r.slice(1).every(x=>x.lexicon_ref===null&&x.lexicalIdentityVerified===false));
+ assert.equal(predictKeyboard(index,'ⲡⲫ')[0].attested,false);
 });
-test('Egyptian suggestions use actual Late Egyptian ref IDs and no transliteration',()=>{
- const r=predictKeyboard(egy,'𓄿',{limit:5});
- assert.equal(r.length,3);
- assert.ok(r.slice(1).every(x=>x.source==='LATE'&&x.lexicon_ref.startsWith('TLA:')));
- assert.equal(predictKeyboard(egy,'nfr').length,1);
+test('ranking favors actual popularity/learning without unrequested dialect balancing',()=>{
+ const r=predictKeyboard(index,'ⲡ',{limit:4});
+ assert.equal(r[1].text,'ⲡⲉ');
+ const boosted=predictKeyboard(index,'ⲡ',{limit:6,learned:{'cop:ⲡⲓ':50}});
+ assert.equal(boosted[1].text,'ⲡⲓ');
+ assert.equal(boosted[1].source,'COMPILED-COPTIC');
 });
-test('personal learning and document context reorder but never label inventions as attested',()=>{
- const learned={'egy:𓄿𓈖':10,'ctx:egy:𓅓𓈖:𓄿𓈖':4,'egy:𓄿𓅃':20};
- const r=predictKeyboard(egy,'𓄿',{learned,previous:'𓅓𓈖',limit:6});
- assert.equal(r[0].text,'𓄿');
- assert.equal(r[1].text,'𓄿𓈖');
- const user=r.find(x=>x.text==='𓄿𓅃');
- assert.ok(user&&user.personal&&!user.attested&&user.lexicon_ref===null);
+test('personal suggestions work in selected dialect without fabricated attestation',()=>{
+ const r=predictKeyboard(index,'ⲡ',{limit:8,dialect:'sahidic',
+  learned:{'cop:ⲡⲫ':10}});
+ const personal=r.find(x=>x.text==='ⲡⲫ');
+ assert.ok(personal&&personal.personal&&!personal.attested);
+ assert.equal(personal.dialects,0);
+ assert.equal(personal.lexicon_ref,null);
+ assert.ok(!predictKeyboard(index,'ⲡ',{dialect:'sahidic',includePersonal:false,learned:{'cop:ⲡⲫ':10}})
+  .some(x=>x.text==='ⲡⲫ'));
 });
-test('Ramses corpus-derived spellings are visibly distinguished from lemmatized records',()=>{
- const idx=prepareKeyboardIndex('egy',{entries:[
-   {ref:'tla19:1',signs:'𓄿𓂝',attestations:4,lemma:'tla19:12',source:'TLA-LE19'},
-   {ref:'ramses:2',signs:'𓄿𓈖',attestations:20,lemma:'ramses-unlinked:2',
-    source:'RAMSES-WORD-MODEL-2023',lexical_identity_verified:false}
- ]});
- const matches=predictKeyboard(idx,'𓄿',{limit:4});
- const tl=matches.find(x=>x.text==='𓄿𓂝');
- const rm=matches.find(x=>x.text==='𓄿𓈖');
- assert.ok(tl&&tl.source==='LATE'&&tl.lexicalIdentityVerified);
- assert.ok(rm&&rm.source==='RAMSES-CORPUS'&&!rm.lexicalIdentityVerified);
- assert.equal(matches[0].text,'𓄿');
+test('validated pack rejects fabricated dialect masks or duplicate surfaces',()=>{
+ assert.throws(()=>prepareKeyboardIndex('egy',base),RangeError);
+ assert.throws(()=>prepareKeyboardIndex('cop',{rows:[['ⲡⲉ',4]]}),TypeError);
+ assert.throws(()=>prepareKeyboardIndex('cop',{rows:[['ⲡⲉ',1],['ⲡⲉ',2]]}),TypeError);
+ assert.throws(()=>prepareKeyboardIndex('cop',{rows:[['english',1]]}),TypeError);
+ assert.deepEqual(predictKeyboard(prepareKeyboardIndex('cop',{rows:[]}),'ⲡ'),[
+  {text:'ⲡ',raw:true,personal:false,attested:false,inLexicon:false,lexicalIdentityVerified:false,lexicon_ref:null}]);
 });
-test('indexed prefix span works with thousands of attested forms',()=>{
- const rows=Array.from({length:25000},(_,i)=>['ⲡ'+(i+'').padStart(5,'0'),1]);
- rows.push(['ⲁⲛ',1],['ⲁⲩⲱ',2]);
- const idx=prepareKeyboardIndex('cop',{rows});
- const r=predictKeyboard(idx,'ⲁ',{limit:4});
- assert.deepEqual(r.map(x=>x.text),['ⲁ','ⲁⲛ','ⲁⲩⲱ']);
+test('prefix search only reads relevant sorted span with 25,000 records',()=>{
+ const records=Array.from({length:25000},(_,i)=>['ⲡ'+String(i).padStart(5,'0'),1]);
+ records.push(['ⲁⲛ',1],['ⲁⲩⲱ',2]);
+ const idx=prepareKeyboardIndex('cop',{rows:records});
+ assert.deepEqual(predictKeyboard(idx,'ⲁ',{limit:4}).map(x=>x.text),['ⲁ','ⲁⲛ','ⲁⲩⲱ']);
 });
