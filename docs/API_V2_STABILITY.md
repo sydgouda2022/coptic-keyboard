@@ -21,7 +21,7 @@ The `src/keyboard_search.mjs` compatibility entry continues to expose the
 existing Renpet calls and delegates to the same implementation. It must not
 grow a competing prediction engine.
 
-Package version `2.0.0` is the **API compatibility version**; the
+Package version `2.1.0` adds optional prepared personal-history indexing without changing existing calls; the
 `PREDICTION_API_VERSION` export is `2`. Neither should change for test-only,
 documentation or internal performance improvements.
 
@@ -88,3 +88,23 @@ Renpet's independently pinned Coptic dependency must retain:
 Renpet owns the browser-side `web/coptic-install.mjs` and UI; it must not
 import code from this library's removed PWA. Renpet's CI and mobile browser
 acceptance must pass when changing the locked source commit.
+
+
+### v2.1 additions (non-breaking)
+
+\`preparePersonalIndex(learned)\` builds a sealed snapshot token with sorted
+Unicode prefix keys and caller-owned learning counts. The optional
+\`personalIndex\` prediction setting reuses this token rather than doing a
+full scan on every query. Rebuild the snapshot after changing learned counts;
+the library **never** collects or persists them. The old \`learned\` object
+option remains supported. Source-listed words cannot be demoted to personal
+words merely because a dialect filter excludes their suggestions.
+
+Editor caret offsets now reject positions *inside grapheme clusters*, not
+just within UTF-16 surrogate pairs. The API continues to use UTF-16 code unit
+offsets at valid boundaries.
+
+The four canonical build artifacts have a rollback journal. For interrupted
+release publication use \`python tools/rebuild_release.py --recover\` before
+\`--check\`. No code can atomically swap four unrelated paths for simultaneous
+readers, so consumer integrity verification remains mandatory.

@@ -12,19 +12,21 @@ const manifest=JSON.parse(readFileSync(new URL('../release/manifest.json',import
 const catalog=JSON.parse(readFileSync(new URL('../release/lexicon.json',import.meta.url),'utf8'));
 
 test('freeze API v2 entry points: additions/removals require deliberate contract review',()=>{
- assert.equal(packageJSON.version,'2.0.0');
+ assert.equal(packageJSON.version,'2.1.0');
  assert.equal(full.PREDICTION_API_VERSION,2);
  assert.deepEqual(Object.keys(full).sort(),[
   'COPTIC_KEYS','LANGUAGE','PREDICTION_API_VERSION','applyKey',
   'backspaceRange','createCopticKeyboard','isInsertableSurface',
   'keyboardKey','keyboardReady','predictKeyboard','prepareKeyboardIndex',
+  'preparePersonalIndex',
   'replaceRange','validateCatalog','validateManifest','verifyReleaseBytes',
   'wordBeforeCaret'
  ].sort());
  assert.deepEqual(Object.keys(predict).sort(),[
   'COPTIC_KEYS','LANGUAGE','PREDICTION_API_VERSION',
   'createCopticKeyboard','isInsertableSurface','keyboardKey',
-  'keyboardReady','predictKeyboard','prepareKeyboardIndex'
+  'keyboardReady','predictKeyboard','prepareKeyboardIndex',
+  'preparePersonalIndex'
  ].sort());
  assert.deepEqual(Object.keys(editing).sort(),[
   'applyKey','backspaceRange','replaceRange','wordBeforeCaret'
