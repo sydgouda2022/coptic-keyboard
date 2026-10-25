@@ -27,7 +27,9 @@ jobs:
           tar -tzf /tmp/coptic-standalone-patch.tar.gz | while IFS= read -r p; do
             case "$p" in /*|../*|*/../*|*/..) echo "Invalid tar path $p";exit 1;; esac
           done
+          cp .github/workflows/keyboard-ci.yml /tmp/coptic-existing-ci.yml
           tar -xzf /tmp/coptic-standalone-patch.tar.gz
+          cp /tmp/coptic-existing-ci.yml .github/workflows/keyboard-ci.yml
           git rm -f --ignore-unmatch src/predict.mjs src/publish_coptic_release.py tools/isolate_keyboard.py tests/predict.test.mjs tests/isolated_keyboard.test.mjs docs/UPSTREAM_SOURCE.md
       - name: Prove canonical release unchanged and app independently tested
         run: |
@@ -47,7 +49,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git rm -rf --ignore-unmatch .migration
-          git rm -f --ignore-unmatch .github/workflows/apply-standalone.yml
           git add -A
           git diff --cached --quiet && exit 0
           git commit -m 'Implement standalone offline Coptic PWA and streamlined source-backed predictor'
