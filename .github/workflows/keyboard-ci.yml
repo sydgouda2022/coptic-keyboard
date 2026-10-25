@@ -30,6 +30,10 @@ jobs:
           python tools/verify_release.py
           PYTHONPATH=src python -m unittest discover -s tests -p 'test_*.py' -v
           npm test
+      - name: Benchmark full lexicon with generous regression bounds
+        env:
+          COP_BENCH_ENFORCE: '1'
+        run: node tools/benchmark.mjs
       - name: Rebuild pinned master, verify sources, and reject nonreproducible releases
         run: |
           set -euo pipefail
@@ -65,3 +69,21 @@ jobs:
           console.log('Clean external consumer: OK');
           EOF
           node consumer.mjs
+
+  node-compatibility:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Run frozen v2 contract and Unicode edge cases on supported Node versions
+        run: |
+          set -euo pipefail
+          npm test
+          node tools/benchmark.mjs
