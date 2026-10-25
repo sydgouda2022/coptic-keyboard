@@ -1,10 +1,11 @@
 /** Local-first, self-repairing Coptic lexicon installation for browser PWAs.
  *  Uses its own IndexedDB database: no access to documents, appointments or learning.
- *  All payload bytes are SHA-256 verified on every open, including cached copies.
+ *  SHA-256 verifies payload bytes against the pinned manifest on each open.
+ *  This is byte-integrity checking, not a digital signature of the publisher.
  */
 export const DB_NAME='coptic-lexicon-install-v1';
-export const MANIFEST_URL='/coptic-lexicon/manifest.json';
-export const PAYLOAD_URL='/coptic-lexicon/lexicon.json';
+export const MANIFEST_URL=new URL('./coptic-lexicon/manifest.json',import.meta.url).href;
+export const PAYLOAD_URL=new URL('./coptic-lexicon/lexicon.json',import.meta.url).href;
 const FORMAT='coptic-lexicon-install-v1';
 let inFlight=null;
 const hex=buffer=>Array.from(new Uint8Array(buffer),b=>b.toString(16).padStart(2,'0')).join('');
@@ -75,16 +76,17 @@ export function idbStore(name=DB_NAME){
   restore:async(valid)=>transaction('readwrite',s=>{s.put(valid,'active');s.delete('previous');})
  };
 }
-async function requestJSON(url,fetcher,timeoutMs){
- const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeoutMs);
- try{const response=await fetcher(url,{cache:'no-store',signal:controller.signal});
+async function withTimeout(url,fetcher,timeoutMs,readBody){
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);
+ try{
+  const response=await fetcher(url,{cache:'no-store',signal:controller.signal});
   if(!response.ok)throw Error('Lexicon asset unavailable: '+response.status);
-  return response;
+  // Scope the timeout over the complete network body, not just headers.
+  return await readBody(response);
  }finally{clearTimeout(timer);}
 }
 async function download(manifest,fetcher,timeoutMs){
- const response=await requestJSON(PAYLOAD_URL,fetcher,timeoutMs);
- const bytes=await response.arrayBuffer();
+ const bytes=await withTimeout(PAYLOAD_URL,fetcher,timeoutMs,r=>r.arrayBuffer());
  if(bytes.byteLength!==manifest.bytes||await hash(bytes)!==manifest.sha256)throw Error('Downloaded lexicon checksum mismatch');
  const slot={manifest,bytes};
  if(!await validateSlot(slot))throw Error('Downloaded lexicon failed structural verification');
@@ -94,26 +96,31 @@ async function download(manifest,fetcher,timeoutMs){
  *  Remote failure with a verified local release never prevents startup.
  */
 export async function ensureCopticLexiconImpl({store=idbStore(),fetcher=fetch,online=true,timeoutMs=3000}={}){
- const saved=await store.read();
+ let saved,storageAvailable=true;
+ try{saved=await store.read();}catch(e){
+  // Safari private mode or denied IndexedDB must not prevent a PWA cache
+  // release from being used in-memory for this session.
+  storageAvailable=false;saved={active:null,previous:null};
+ }
  let active=await validateSlot(saved.active),previous=await validateSlot(saved.previous);
  let recovered=false;
- if(!active&&previous){await store.restore(previous.slot);active=previous;recovered=true;}
+ if(!active&&previous){try{await store.restore(previous.slot);}catch{storageAvailable=false;}active=previous;recovered=true;}
  let remote=null;
  if(online||!active){
   // When the local record is missing, also try the PWA's offline precache.
   // A cached, SHA-256-valid release can repair IndexedDB without connectivity.
-  try{remote=validateManifest(await (await requestJSON(MANIFEST_URL,fetcher,active?1600:timeoutMs)).json());}
+  try{remote=validateManifest(await withTimeout(MANIFEST_URL,fetcher,active?1600:timeoutMs,r=>r.json()));}
   catch(e){if(!active)throw Error('Lexicon unavailable and no verified local copy: '+String(e?.message||e));}
  }
  if(remote&&(!active||remote.sha256!==active.slot.manifest.sha256)){
   try{
    const next=await download(remote,fetcher,timeoutMs);
-   await store.activate(next,active?.slot||null);active=await validateSlot(next);recovered=false;
+   try{await store.activate(next,active?.slot||null);}catch{storageAvailable=false;}active=await validateSlot(next);recovered=false;
   }catch(e){if(!active)throw Error('Lexicon download/repair failed: '+String(e?.message||e));}
  }
  if(!active)throw Error('No verified local lexicon and no downloadable release; connect once to install');
  return {payload:active.payload,bytes:active.slot.bytes,manifest:active.slot.manifest,
-   status:recovered?'recovered':remote&&active.slot.manifest.sha256===remote.sha256?'verified':'offline',
+   status:!storageAvailable?'memory-only':recovered?'recovered':remote&&active.slot.manifest.sha256===remote.sha256?'verified':'offline',
    complete:active.slot.manifest.complete};
 }
 /** Runtime entry: one operation per page/worker. */

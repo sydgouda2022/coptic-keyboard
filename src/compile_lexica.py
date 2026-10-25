@@ -1,4 +1,4 @@
-"""Independent Coptic lexicon compiler. No other language is compiled.
+"""Independent coptic source-backed lexicon compiler, partitioned from aaa.
 """
 from __future__ import annotations
 
@@ -34,12 +34,6 @@ def digest(path):
 def coptic(s):
     return isinstance(s,str) and bool(s) and any(0x2C80<=ord(c)<=0x2CFF or 0x03E2<=ord(c)<=0x03EF or 0x0370<=ord(c)<=0x03FF or 0x1F00<=ord(c)<=0x1FFF for c in s)
 
-def xml_entries(path):
-    for _event,el in ET.iterparse(path,events=('end',)):
-        if el.tag==TEI+'entry':
-            yield el
-            el.clear()
-
 def db_connect(path):
     dest=Path(path)
     if dest.exists():raise FileExistsError('Refuse accidental overwrite: '+str(dest))
@@ -72,6 +66,12 @@ def geo_mask(labels):
         if x in ('S','SAHIDIC'): mask|=1
         if x in ('B','BOHAIRIC'):mask|=2
     return mask
+
+def xml_entries(path):
+    for _event,el in ET.iterparse(path,events=('end',)):
+        if el.tag==TEI+'entry':
+            yield el
+            el.clear()
 
 def coptic_tei_forms(path):
     """Preserve entries' morphology/senses separately from surface prediction."""
@@ -111,12 +111,12 @@ def build_coptic(tei_path,forms_path,popular_path,out):
     merger={}
     source_words=set()
     for word,mask in core['rows']:
-        if coptic(word) and isinstance(mask,int):
+        if coptic(word) and type(mask) is int and mask in (0,1,2,3):
             merger[word]=merger.get(word,0)|mask
             source_words.add(word)
     supplement={}
     for word,n in extra['rows']:
-        if coptic(word) and isinstance(n,int) and n>=0:
+        if coptic(word) and type(n) is int and n>=0:
             merger.setdefault(word,0)
             supplement[word]=max(supplement.get(word,0),n)
     tei_evidence,stats=coptic_tei_forms(tei_path)
@@ -194,7 +194,7 @@ def build_coptic(tei_path,forms_path,popular_path,out):
     persist_json(out/'coverage.json',report)
     return report
 
-if __name__=='__main__':
+if __name__ == '__main__':
     import argparse
     p=argparse.ArgumentParser()
     p.add_argument('--tei',type=Path,required=True)
