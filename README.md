@@ -32,8 +32,8 @@ The app has no remote runtime API and performs no telemetry or sync.
 - `src/compile_lexica.py`: Coptic-only TEI/seed compiler, making canonical
   SQLite source-evidence tables and the matching surface projection.
 - `src/publish_compiled_coptic.py`: the **one** supported publisher.
-- `release/`: 20,652 *distinct listed written forms* / 38,194 SQLite spelling
-  records, including source metadata, counts and SHA-256 release manifest.
+- `release/`: 20,652 *distinct listed written forms* / 22,934 SQLite spelling
+  records, including source metadata, counts, browser SHA-256 and canonical SQLite fingerprint.
 
 Renpet pins this repository by exact Git commit and manifest hash. The public
 `keyboard_search` and `coptic_install` contracts are intentionally preserved;
@@ -55,3 +55,44 @@ back up by **Export .txt** (storage may be cleared by the browser).
 
 Read [Sources & licensing](docs/SOURCES.md) and [Audit/architecture](docs/AUDIT.md).
 The historical upstream mixed-project overview is not the runtime contract.
+
+## Reusable programming API and embeddable keyboard
+
+The PWA is an example application. The keyboard is also a **reusable library**
+with no dependency on Renpet or the PWA's UI code. Public exports, a typed
+contract, a zero-framework embeddable touch keyboard and its opt-in styles are
+available from `src/index.mjs`, `types/index.d.mts` and
+`styles/keyboard.css`:
+
+```js
+import {mountCopticKeyboard,prepareKeyboardIndex,predictKeyboard}
+  from './src/index.mjs';
+const editor=document.querySelector('textarea');
+const keyboard=mountCopticKeyboard({
+  target:editor,mount:document.querySelector('#keyboard-container')
+});
+keyboard.setLexicon(copticCatalog); // verified Coptic release JSON from your app
+keyboard.setDialect('sahidic');
+keyboard.destroy(); // unmount and clean up listeners
+```
+
+```html
+<link rel="stylesheet" href="./styles/keyboard.css">
+```
+
+The host app owns saved documents, personal usage data, keyboard placement and
+its distribution channel. The library never fetches on import or while typing.
+`ensureCopticLexicon` is an **optional** separate cache/installer component;
+a host may instead supply its own checksum-verified Coptic catalog. Dialect
+membership is not invented; editorial source notation is excluded by default.
+
+**API:** `LANGUAGE`, `PREDICTION_API_VERSION`, `keyboardKey`,
+`prepareKeyboardIndex`, `predictKeyboard`, `isInsertableSurface`,
+`mountCopticKeyboard`, `COPTIC_KEYS`, `ensureCopticLexicon`,
+`validateCatalog`, `validateManifest`.
+
+**Package:** `package.json` declares `@sydgouda2022/coptic-keyboard` and
+export paths, but deliberately prevents npm publication until the original-code
+and dataset redistribution permissions are reviewed. See
+[NOTICE.md](NOTICE.md). For a standalone widget example, serve
+[examples/index.html](examples/index.html) from the repository root.
