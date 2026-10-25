@@ -47,3 +47,17 @@ No claims of comprehensive Coptic morphology, phonology, contextual grammar,
 or verified dialect for the unassigned 1,007 forms. No automatic transfer of
 private user data between independent browser origins; copying raw browser
 storage would be unsafe. A user can manually export plain text instead.
+
+### Library reuse and source master
+
+The standalone PWA also provides an independent `src/index.mjs` public
+programming API with declarations in `types/index.d.mts`. A host can mount
+`src/keyboard.mjs` into its own DOM and inject a verified pack without
+importing any editor-specific UI code. The separate sample lives under
+`examples/`. See `package.json` and `NOTICE.md` for packaging restrictions.
+
+The canonical SQLite distinguishes `prediction_surface` (merged source forms
+and dialect masks) from distinct TEI `lemma` and `spelling` identities.
+An already TEI-linked written surface no longer receives a fabricated
+independent `unlinked:` lemma. Exactly 20,652 public written forms map to
+22,934 canonical spelling identities in the new source rebuild.
