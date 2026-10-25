@@ -112,7 +112,9 @@ def publish_release(generated: Path, target: Path, on_replace=None) -> None:
         _sync_directory(journal / "backup")
         _sync_directory(journal / "stage")
         marker = journal / "recovery.json"
-        _copy_json({"schema": 1, "backup": backup}, marker)
+        pending = journal / "recovery.tmp"
+        _copy_json({"schema": 1, "backup": backup}, pending)
+        os.replace(pending, marker)
         _sync_directory(journal)
         _sync_directory(target)
         # Manifest is installed LAST so its hash identifies the intended
