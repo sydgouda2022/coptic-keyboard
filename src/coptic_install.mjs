@@ -10,7 +10,6 @@ const FORMAT='coptic-lexicon-install-v1';
 let inFlight=null;
 const hex=buffer=>Array.from(new Uint8Array(buffer),b=>b.toString(16).padStart(2,'0')).join('');
 const hash=async bytes=>hex(await crypto.subtle.digest('SHA-256',bytes));
-const enc=new TextEncoder();
 const native=s=>typeof s==='string'&&[...s].some(c=>{const n=c.codePointAt(0);return (n>=0x2c80&&n<=0x2cff)||(n>=0x03e2&&n<=0x03ef)||(n>=0x0370&&n<=0x03ff)||(n>=0x1f00&&n<=0x1fff);});
 
 export function validateCatalog(payload){
@@ -31,7 +30,7 @@ export function validateManifest(m){
  if(!m||m.format!==FORMAT||m.language!=='cop'||!Array.isArray(m.dialects)||m.dialects.join(',')!=='Sahidic,Bohairic'||
    typeof m.release!=='string'||!m.release||!Number.isSafeInteger(m.bytes)||m.bytes<=0||
    !Number.isSafeInteger(m.spelling_records)||m.spelling_records<1||
-   !/^[a-f0-9]{64}$/.test(m.sha256)||typeof m.complete!=='boolean')throw Error('Invalid Coptic lexicon manifest');
+   !/^[a-f0-9]{64}$/.test(m.sha256)||(m.sqlite_sha256!=null&&!/^[a-f0-9]{64}$/.test(m.sqlite_sha256))||typeof m.complete!=='boolean')throw Error('Invalid Coptic lexicon manifest');
  return m;
 }
 export async function validateSlot(slot){
@@ -95,36 +94,57 @@ async function download(manifest,fetcher,timeoutMs){
 /** Dependency injection used for no-browser regression and simulated-corruption tests.
  *  Remote failure with a verified local release never prevents startup.
  */
-export async function ensureCopticLexiconImpl({store=idbStore(),fetcher=fetch,online=true,timeoutMs=3000}={}){
- let saved,storageAvailable=true;
- try{saved=await store.read();}catch(e){
-  // Safari private mode or denied IndexedDB must not prevent a PWA cache
-  // release from being used in-memory for this session.
-  storageAvailable=false;saved={active:null,previous:null};
- }
+export async function ensureCopticLexiconImpl({
+ store=idbStore(),fetcher=fetch,online=true,timeoutMs=3000
+}={}){
+ let saved={active:null,previous:null},storageError=null,updateError=null;
+ try{saved=await store.read();}
+ catch(e){storageError=String(e?.message||e);}
  let active=await validateSlot(saved.active),previous=await validateSlot(saved.previous);
- let recovered=false;
- if(!active&&previous){try{await store.restore(previous.slot);}catch{storageAvailable=false;}active=previous;recovered=true;}
+ let recovered=false,volatile=false;
+ if(!active&&previous){
+  active=previous;recovered=true;
+  if(!storageError){
+   try{await store.restore(previous.slot);}
+   catch(e){storageError=String(e?.message||e);volatile=true;}
+  }else volatile=true;
+ }
  let remote=null;
  if(online||!active){
-  // When the local record is missing, also try the PWA's offline precache.
-  // A cached, SHA-256-valid release can repair IndexedDB without connectivity.
-  try{remote=validateManifest(await withTimeout(MANIFEST_URL,fetcher,active?1600:timeoutMs,r=>r.json()));}
-  catch(e){if(!active)throw Error('Lexicon unavailable and no verified local copy: '+String(e?.message||e));}
+  // Cached manifests remain available during PWA offline recovery.
+  try{remote=validateManifest(await withTimeout(
+   MANIFEST_URL,fetcher,active?1600:timeoutMs,r=>r.json()));}
+  catch(e){
+   updateError=String(e?.message||e);
+   if(!active)throw Error('Lexicon unavailable and no verified local copy: '+updateError);
+  }
  }
  if(remote&&(!active||remote.sha256!==active.slot.manifest.sha256)){
   try{
    const next=await download(remote,fetcher,timeoutMs);
-   try{await store.activate(next,active?.slot||null);}catch{storageAvailable=false;}active=await validateSlot(next);recovered=false;
-  }catch(e){if(!active)throw Error('Lexicon download/repair failed: '+String(e?.message||e));}
+   const verified=await validateSlot(next);
+   if(!verified)throw Error('Downloaded catalog failed structural verification');
+   if(!storageError){
+    try{await store.activate(next,active?.slot||null);}
+    catch(e){storageError=String(e?.message||e);volatile=true;}
+   }else volatile=true;
+   active=verified;recovered=false;
+  }catch(e){
+   updateError=String(e?.message||e);
+   if(!active)throw Error('Lexicon download/repair failed: '+updateError);
+  }
  }
- if(!active)throw Error('No verified local lexicon and no downloadable release; connect once to install');
+ if(!active)throw Error('No verified local Coptic lexicon; connect once to install');
  return {payload:active.payload,bytes:active.slot.bytes,manifest:active.slot.manifest,
-   status:!storageAvailable?'memory-only':recovered?'recovered':remote&&active.slot.manifest.sha256===remote.sha256?'verified':'offline',
-   complete:active.slot.manifest.complete};
+  status:volatile||storageError?'memory-only':recovered?'recovered':updateError?'offline':
+    remote&&active.slot.manifest.sha256===remote.sha256?'verified':'offline',
+  complete:active.slot.manifest.complete,storageError,updateError};
 }
 /** Runtime entry: one operation per page/worker. */
 export function ensureCopticLexicon(options={}){
- if(!inFlight)inFlight=ensureCopticLexiconImpl({...options,online:options.online??(typeof navigator==='undefined'||navigator.onLine!==false)}).finally(()=>{inFlight=null;});
+ const opts={...options,online:options.online??(typeof navigator==='undefined'||navigator.onLine!==false)};
+ // Custom injected stores/fetchers cannot share an unrelated in-flight call.
+ if(Object.keys(options).length)return ensureCopticLexiconImpl(opts);
+ if(!inFlight)inFlight=ensureCopticLexiconImpl(opts).finally(()=>{inFlight=null;});
  return inFlight;
 }
