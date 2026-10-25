@@ -1,32 +1,36 @@
 {
   "name": "@sydgouda2022/coptic-keyboard",
-  "version": "1.0.0",
-  "description": "Standalone Unicode Coptic prediction engine and accessible embeddable keyboard",
+  "version": "2.0.0",
+  "description": "Headless Coptic Unicode keyboard API, predictive lexicon, and pure editing functions",
   "type": "module",
   "private": true,
   "engines": {
     "node": ">=20"
   },
-  "sideEffects": [
-    "./styles/keyboard.css"
-  ],
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./types/index.d.mts",
       "import": "./src/index.mjs"
     },
     "./prediction": {
-      "types": "./types/index.d.mts",
-      "import": "./src/keyboard_search.mjs"
+      "types": "./types/prediction.d.mts",
+      "import": "./src/core.mjs"
     },
-    "./styles.css": "./styles/keyboard.css",
-    "./lexicon.json": "./release/lexicon.json",
-    "./manifest.json": "./release/manifest.json"
+    "./editing": {
+      "types": "./types/editing.d.mts",
+      "import": "./src/editor.mjs"
+    },
+    "./lexicon": {
+      "types": "./types/lexicon.d.mts",
+      "import": "./src/lexicon.mjs"
+    },
+    "./data/lexicon.json": "./release/lexicon.json",
+    "./data/manifest.json": "./release/manifest.json"
   },
   "files": [
     "src/*.mjs",
     "types/*.d.mts",
-    "styles/*.css",
     "release/lexicon.json",
     "release/manifest.json",
     "README.md",
@@ -34,6 +38,6 @@
   ],
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "audit": "python -m unittest discover -s tests -p 'test_*.py' -v"
+    "audit": "python tools/verify_release.py && python -m unittest discover -s tests -p 'test_*.py' -v"
   }
 }

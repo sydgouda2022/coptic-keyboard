@@ -1,39 +1,41 @@
-# Dictionary provenance, redistribution and limitations
+# Coptic lexicon evidence and reproducibility
 
-The corpus datasets are not application source code. **No blanket code licence
-is asserted over the imported third-party corpus**. Preserve the attribution
-and licensing terms of the actual pinned source editions before redistribution.
+The source-backed releases are created from exactly these pinned inputs:
 
-- KELLIA Comprehensive Coptic Lexicon v1.2 (2020), TEI XML, source commit
-  `f365e2d239bd12b6897f3a761487e40d384b2b24`, SHA-256
-  `ace84fce11b76386a6adb9888b2cb947056954fc9fe9c04aa0676b1f595fd43d`;
-  published by KELLIA/DDGLC; check source edition's CC BY-SA notice.
-- Coptic SCRIPTORIUM `coptic-nlp` collected orthographic forms, seed inventory
-  revision `30e02f9e2d6a64386eaf788ec5d6ccb467daca4b`, pinned hash and
-  dialect masks recorded in the SQLite `metadata` table.
-- KELLIA Coptic Dictionary Online `supplemental_entries.tab`, source listed in
-  `sources/seed-word-lists/coptic-popular.json` with original revision and
-  licensing statement. These numbers are *ranking hints*, not a statistically
-  representative corpus frequency study.
+- **KELLIA Comprehensive Coptic Lexicon v1.2 (2020)**, TEI XML at commit
+  `f365e2d239bd12b6897f3a761487e40d384b2b24`;
+  SHA-256 `ace84fce11b76386a6adb9888b2cb947056954fc9fe9c04aa0676b1f595fd43d`.
+- **Coptic SCRIPTORIUM** orthographic seed list, revision
+  `30e02f9e2d6a64386eaf788ec5d6ccb467daca4b`;
+  `sources/seed-word-lists/coptic.json` SHA-256
+  `47b0df96d5f45eaab36c48d24ad2c106dc3deabbcbabcdfa0be84923313fa9df`.
+- **KELLIA** supplementary popularity-hint source,
+  `sources/seed-word-lists/coptic-popular.json` SHA-256
+  `94528b7badd35d5b0671302da25385f4a8b75c343c347284f817a0c1a2e6c378`.
 
-The source-built `release/lexicon.sqlite3` preserves TEI lemma IDs, individual
-form references when available, POS/first English gloss fields, unlinked
-corpus indices and source hashes. The smaller `release/lexicon.json` is a
-*surface projection* of the same compiler pass, not an export of finalized
-SQLite queries; both inventories are cross-checked in `tools/verify_release.py`.
+All source fingerprints are recorded in the SQLite master and released
+catalog metadata. `release/lexicon.sqlite3` contains source lemma IDs, source
+spellings, referenced source records, and an independent
+`prediction_surface` table matching the browser catalog exactly.
+`release/lexicon.json` contains 20,652 distinct written surfaces;
+the canonical SQLite master contains 22,934 spelling identity records.
+Homographs can share a surface without sharing a lemma.
 
-The SQLite master may have more rows than the surface catalog because a single
-written surface can relate to multiple entries. Unlinked records deliberately
-avoid assigning corpus-only evidence to a potentially incorrect homographic
-TEI lemma. They are not proof of distinct meanings or independent witnesses.
+Not every source spelling has a proven individual manuscript witness. The
+public runtime does **not** export TEI lemma references for each suggestion.
+The compiler retains only selected POS/gloss evidence and does not preserve
+every semantic sense or complete inflectional paradigm. The source dialect
+labels are Sahidic/Bohairic only, and 1,007 surfaces have neither assignment;
+an unassigned mask is not evidence of historical absence. Popularity values
+are limited ranking hints, not a statistically representative frequency corpus.
+Dictionary notations with punctuation or multiple words are preserved in
+source data but excluded from ordinary Unicode word insertion.
 
-Actual insertion excludes editorial annotations and any entries containing
-characters other than Coptic/Greek Unicode letters and marks. This affects
-usable suggestion counts but does not delete source evidence or change public
-manifest hashes. Source-listed does not necessarily mean linguistically sound
-in a given sentence. No corpus source is scraped during app execution.
+Run `python tools/rebuild_release.py --check` to compile the fixed inputs
+into a temporary directory and compare the published release. The compiler
+produces all canonical artifacts without loading or altering user data.
+Run `python tools/verify_release.py` for a purely local release audit.
 
-For a reproducible offline build, place the exact pinned TEI edition in a
-private directory and use the documented `compile_lexica.py` arguments; the
-CI `rebuild_release.sh` fetches this pinned edition, checks its SHA-256 and
-verifies that the generated catalog matches the committed release.
+Respect any KELLIA / Coptic SCRIPTORIUM source attribution, share-alike,
+or redistribution obligations applicable to the exact source edition.
+Code and dataset rights are distinct; see `NOTICE.md`.

@@ -1,4 +1,4 @@
-name: Standalone Coptic keyboard — source, release, app and browser verification
+name: Coptic Keyboard — headless API, release and consumer integrity
 on:
   push:
     branches: [main]
@@ -7,77 +7,61 @@ on:
 permissions:
   contents: read
 jobs:
-  audit-and-build:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 18
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
-        with: {python-version: '3.12'}
-      - uses: actions/setup-node@v5
-        with: {node-version: '24'}
-      - name: Verify source-backed SQLite, JSON and source hashes
-        run: python tools/verify_release.py
-      - name: Run both standalone application and reusable public-package regression
-        run: |
-          set -euo pipefail
-          PYTHONPATH=src python -m unittest discover -s tests -p 'test_*.py' -v
-          npm test
-          node --check src/app.mjs
-          node --check src/keyboard.mjs
-          node --check src/index.mjs
-          npm pack --dry-run --json > /tmp/coptic-package-audit.json
-      - name: Check reproducibility from pinned TEI upstream
-        run: |
-          set -euo pipefail
-          python tools/rebuild_release.py --check
-          bash tools/rebuild_release.sh
-          git diff --exit-code -- release/lexicon.json release/manifest.json release/coverage.json
-      - name: Build fully self-contained offline application
-        run: |
-          set -euo pipefail
-          python tools/build_app.py
-          test -s dist/coptic-lexicon/lexicon.json
-          test -s dist/keyboard-search.mjs
-          test -s dist/sw.js
-          python - <<'PY'
-          import re
-          from pathlib import Path
-          for file in Path('dist').glob('*.mjs'):
-              for dep in re.findall(r"from\\s+['\\\"]([^'\\\"]+)",file.read_text()):
-                  if dep.startswith('./') and not (file.parent/dep).exists():
-                      raise RuntimeError(f"Missing bundled ESM dependency {file}: {dep}")
-          PY
-          ! grep -q 'coptic-keyboard-v1' dist/sw.js
-      - name: Upload installable PWA
-        uses: actions/upload-artifact@v4
-        with:
-          name: standalone-coptic-keyboard-pwa
-          path: dist/
-          if-no-files-found: error
-          retention-days: 14
-  browser:
-    needs: audit-and-build
+  headless:
     runs-on: ubuntu-24.04
     timeout-minutes: 22
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
-        with: {python-version: '3.12'}
       - uses: actions/setup-node@v5
         with: {node-version: '24'}
-      - name: Build PWA and install mobile browser engines
+      - uses: actions/setup-python@v6
+        with: {python-version: '3.12'}
+      - name: Enforce UI-free pure JavaScript API and source-backed lexicon
         run: |
           set -euo pipefail
-          python tools/build_app.py
-          npm install --no-save --package-lock=false playwright@1.56.1
-          npx playwright install --with-deps chromium webkit
-      - name: Serve app, then exercise iPhone/iPad WebKit/Chromium offline
+          test ! -e web
+          test ! -e styles
+          test ! -e examples
+          test ! -e src/app.mjs
+          test ! -e src/keyboard.mjs
+          test ! -e src/coptic_install.mjs
+          test ! -e src/_generic_search.mjs
+          test ! -e tools/build_app.py
+          python tools/verify_release.py
+          PYTHONPATH=src python -m unittest discover -s tests -p 'test_*.py' -v
+          npm test
+      - name: Rebuild pinned master, verify sources, and reject nonreproducible releases
         run: |
           set -euo pipefail
-          python -m http.server 8765 --bind 127.0.0.1 --directory dist >/tmp/coptic-web.log 2>&1 &
-          for i in $(seq 1 20); do curl -sf http://127.0.0.1:8765/ >/dev/null && break || sleep 1; done
-          node tests/browser.mjs
-          python -m http.server 8129 --bind 127.0.0.1 --directory . >/tmp/coptic-embed-http.log 2>&1 &
-          for i in $(seq 1 20); do curl -sf http://127.0.0.1:8129/examples/index.html >/dev/null && break || sleep 1; done
-          node tests/browser.cjs
+          python tools/rebuild_release.py --check
+          git diff --exit-code -- release
+      - name: Pack and run a clean third-party consumer (JS and TypeScript)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/coptic-consumer"
+          npm pack --pack-destination "$RUNNER_TEMP/coptic-consumer"
+          cd "$RUNNER_TEMP/coptic-consumer"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund --no-package-lock \
+            ./sydgouda2022-coptic-keyboard-2.0.0.tgz typescript@5.9.3
+          cp "$GITHUB_WORKSPACE/tests/type-consumer.mts" ./consumer.mts
+          npx tsc --strict --noEmit --target ES2022 --module NodeNext \
+            --moduleResolution NodeNext consumer.mts
+          cat > consumer.mjs <<'EOF'
+          import assert from 'node:assert/strict';
+          import * as lib from '@sydgouda2022/coptic-keyboard';
+          import * as predict from '@sydgouda2022/coptic-keyboard/prediction';
+          import * as editing from '@sydgouda2022/coptic-keyboard/editing';
+          import * as lexicon from '@sydgouda2022/coptic-keyboard/lexicon';
+          import catalog from '@sydgouda2022/coptic-keyboard/data/lexicon.json' with {type:'json'};
+          import manifest from '@sydgouda2022/coptic-keyboard/data/manifest.json' with {type:'json'};
+          assert.equal(lib.COPTIC_KEYS.length,32);
+          assert.equal(typeof predict.predictKeyboard,'function');
+          assert.equal(typeof editing.applyKey,'function');
+          assert.equal(lexicon.validateManifest(manifest).language,'cop');
+          assert.equal(lib.createCopticKeyboard(catalog).suggest('ⲡ')[0].text,'ⲡ');
+          assert.equal(lib.mountCopticKeyboard,undefined);
+          assert.equal(lib.ensureCopticLexicon,undefined);
+          console.log('Clean external consumer: OK');
+          EOF
+          node consumer.mjs
