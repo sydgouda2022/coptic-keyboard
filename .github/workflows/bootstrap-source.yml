@@ -32,6 +32,7 @@ jobs:
           rm -f src/lexicon_install.mjs src/publish_release.py tests/lexicon_install.test.mjs
           curl -fLsS --retry 3 --max-time 150 'https://raw.githubusercontent.com/KELLIA/dictionary/f365e2d239bd12b6897f3a761487e40d384b2b24/xml/Comprehensive_Coptic_Lexicon-v1.2-2020.xml' -o /tmp/KELLIA-coptic.xml
           echo 'ace84fce11b76386a6adb9888b2cb947056954fc9fe9c04aa0676b1f595fd43d  /tmp/KELLIA-coptic.xml' | sha256sum -c -
+          rm -f release/lexicon.sqlite3 release/lexicon.json release/coverage.json release/manifest.json
           python src/compile_lexica.py coptic --tei /tmp/KELLIA-coptic.xml --forms sources/seed-word-lists/coptic.json --popular sources/seed-word-lists/coptic-popular.json --out release
           python src/publish_compiled_coptic.py --out release
           python - <<'PY'
