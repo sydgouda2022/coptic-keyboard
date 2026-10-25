@@ -1,5 +1,5 @@
 import {ensureCopticLexicon} from './coptic-install.mjs';
-import {prepareKeyboardIndex,predictKeyboard} from './keyboard-search.mjs';
+import {prepareKeyboardIndex,predictKeyboard,isInsertableSurface} from './keyboard-search.mjs';
 import {wordBeforeCaret,replaceRange,backspaceRange} from './editor.mjs';
 
 const LETTERS=[...'ⲁⲃⲅⲇⲉⲋⲍⲏⲑⲓⲕⲗⲙⲛⲝⲟⲡⲣⲥⲧⲩⲫⲭⲯⲱϣϥϧϩϫϭϯ'];
@@ -78,8 +78,9 @@ function init(){
 function updateOnline(){if(!index)return;status.textContent=navigator.onLine?'Dictionary ready · works offline':'Offline · dictionary available';status.className='status ready';}
 async function main(){init();
  try{const result=await ensureCopticLexicon();index=prepareKeyboardIndex('cop',result.payload);
-  const discarded=result.payload.rows.length-index.rows.length;
-  $('dictionary-detail').textContent=`${index.rows.length.toLocaleString()} insertable words · ${discarded.toLocaleString()} lexicographic forms excluded from keyboard insertion. Lexicon is source-listed, not manuscript-verified.`;
+  const insertable=index.rows.filter(row=>isInsertableSurface(row.text)).length;
+  const discarded=result.payload.rows.length-insertable;
+  $('dictionary-detail').textContent=`${insertable.toLocaleString()} insertable words · ${discarded.toLocaleString()} lexicographic forms excluded from keyboard insertion. Lexicon is source-listed, not manuscript-verified.`;
   updateOnline();renderSuggestions();
  }catch(error){console.error('Coptic dictionary setup:',error);status.textContent='Dictionary unavailable · writing still works';status.className='status warning';renderSuggestions();notice('Dictionary unavailable; you can still type and export.');}
  if('serviceWorker'in navigator&&location.protocol!=='file:'){
