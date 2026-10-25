@@ -53,7 +53,7 @@ export function validateSlot(slot:unknown):Promise<{slot:unknown;payload:CopticL
 export function idbStore(name?:string):unknown;
 export interface InstalledLexicon {
   payload:CopticLexicon;bytes:ArrayBuffer;manifest:CopticManifest;
-  status:'volatile'|'recovered'|'offline'|'verified';
+  status:'memory-only'|'recovered'|'offline'|'verified';
   complete:boolean;storageError:string|null;updateError:string|null;
 }
 export function ensureCopticLexiconImpl(options?:{
