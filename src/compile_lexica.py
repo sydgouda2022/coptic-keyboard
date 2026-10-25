@@ -111,12 +111,12 @@ def build_coptic(tei_path,forms_path,popular_path,out):
     merger={}
     source_words=set()
     for word,mask in core['rows']:
-        if coptic(word) and isinstance(mask,int):
+        if coptic(word) and type(mask) is int and mask in (0,1,2,3):
             merger[word]=merger.get(word,0)|mask
             source_words.add(word)
     supplement={}
     for word,n in extra['rows']:
-        if coptic(word) and isinstance(n,int) and n>=0:
+        if coptic(word) and type(n) is int and n>=0:
             merger.setdefault(word,0)
             supplement[word]=max(supplement.get(word,0),n)
     tei_evidence,stats=coptic_tei_forms(tei_path)
