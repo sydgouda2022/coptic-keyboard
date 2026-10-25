@@ -47,7 +47,7 @@ jobs:
           cd "$RUNNER_TEMP/coptic-consumer"
           npm init -y >/dev/null
           npm install --no-audit --no-fund --no-package-lock \
-            ./sydgouda2022-coptic-keyboard-2.0.0.tgz typescript@5.9.3
+            ./sydgouda2022-coptic-keyboard-2.1.0.tgz typescript@5.9.3
           cp "$GITHUB_WORKSPACE/tests/type-consumer.mts" ./consumer.mts
           npx tsc --strict --noEmit --target ES2022 --module NodeNext \
             --moduleResolution NodeNext consumer.mts
